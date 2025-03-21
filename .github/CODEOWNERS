@@ -4,5 +4,7 @@
 
 * @moderncode-source/vex-svc
 
-/vex/ @KirilStrezikozin
-/*.nix @KirilStrezikozin
+*.nix @KirilStrezikozin
+go.mod @KirilStrezikozin
+go.sum @KirilStrezikozin
+*.go @KirilStrezikozin
