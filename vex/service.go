@@ -48,6 +48,9 @@ const (
 // [Service.Stop] if service's server is nil.
 var ErrNilServer = errors.New("service's server must not be nil")
 
+// ErrNilLogger is returned by [Service.Validate] if service's logger is nil.
+var ErrNilLogger = errors.New("service's logger must not be nil")
+
 // Service defines parameters and provides functionality to run a Vex service.
 // Use [New] to create a new valid service instance.
 type Service struct {
@@ -96,6 +99,10 @@ func NewWithHandler(addr string, handler http.Handler, logger *zerolog.Logger) *
 func (svc *Service) Validate() error {
 	if svc.server == nil {
 		return ErrNilServer
+	}
+
+	if svc.logger == nil {
+		return ErrNilLogger
 	}
 
 	if _, err := net.ResolveTCPAddr("tcp", svc.server.Addr); err != nil {
