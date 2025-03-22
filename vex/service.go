@@ -57,13 +57,17 @@ type Service struct {
 
 // New allocates and returns a new [Service] with [http.Server] that will
 // listen on TCP network address addr and handle requests on incoming
-// connections using [ServiceMux] handler. This is the recommended and default
-// way to create a Vex service.
+// connections using [ServiceMux] handler. This is the recommended and the
+// default way to create a Vex service.
+//
+// Default service request handlers will be registered automatically. If you
+// will need multiple Vex services, use [NewWithHandler] instead and pass a new
+// handler to each to avoid conflict errors.
 //
 // To choose your own handler or fall back to [http.DefaultServeMux],
 // use [NewWithHandler].
-func New(addr string, logger *zerolog.Logger) *Service {
-	return &Service{
+func New(addr string, logger *zerolog.Logger) (*Service, error) {
+	svc := &Service{
 		server: &http.Server{
 			ReadHeaderTimeout: serverReadHeaderTimeout,
 			Addr:              addr,
@@ -71,6 +75,12 @@ func New(addr string, logger *zerolog.Logger) *Service {
 		},
 		logger: logger,
 	}
+
+	if err := svc.RegisterDefaultHandlers(ServiceMux); err != nil {
+		return nil, err
+	}
+
+	return svc, nil
 }
 
 // NewWithHandler allocates and returns a new [Service] with [http.Server]
@@ -89,6 +99,33 @@ func NewWithHandler(addr string, handler http.Handler, logger *zerolog.Logger) *
 		},
 		logger: logger,
 	}
+}
+
+// RegisterDefaultHandlers registers all default request handlers for the
+// service on the given HTTP request multiplexer. If [http.ServeMux.HandleFunc]
+// panics, its error is captured and returned.
+func (svc *Service) RegisterDefaultHandlers(mux *http.ServeMux) (err error) {
+	// Let the caller handle the error if [http.ServeMux.HandleFunc] panics.
+	defer func() {
+		if recoverErr, ok := recover().(error); ok {
+			err = recoverErr
+		}
+	}()
+
+	mux.HandleFunc(HealthEndpoint, HealthHandler)
+
+	// Request handlers' endpoints for the mux below start with "/v1/".
+	//
+	// We could instead create another mux with a handler wrapped in
+	// [http.StripPrefix] to make endpoint patterns shorter, but, since there
+	// is a small total number of endpoints, it is unnecessary.
+	mux.HandleFunc(ReadyEndpoint, ReadyHandler)
+
+	// Submission queue GET/POST handlers.
+	mux.HandleFunc(PostQueueEndpoint, PostQueueHandler)
+	mux.HandleFunc(GetQueueEndpoint, GetQueueHandler)
+
+	return err
 }
 
 // Start begins listening to and serving incoming requests to the service
