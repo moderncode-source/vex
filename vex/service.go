@@ -164,6 +164,8 @@ func (svc *Service) Start() error {
 	// Limit the number of concurrent connections to the service.
 	ln := netutil.LimitListener(l, serverMaxConnections)
 
+	svc.logger.Info().Msgf("Vex service running on %s", l.Addr())
+
 	err = svc.server.Serve(ln)
 	if err == nil || err == http.ErrServerClosed {
 		return nil
