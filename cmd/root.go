@@ -61,7 +61,6 @@ Documentation is available at https://github.com/moderncode-source/vex-svc`,
 		}
 
 		cmdLogger.Info().Msg("Welcome to Vex - a virtual execution micro-service")
-		cmdLogger.Info().Msgf("Starting service process [%d] (Press CTRL+C to quit)", os.Getpid())
 
 		// Create a thread-safe and fast logger for the service.
 		w := diode.NewWriter(logOutput, diodeWriterSize, 0, func(missed int) {
@@ -79,6 +78,13 @@ Documentation is available at https://github.com/moderncode-source/vex-svc`,
 			cmdLogger.Error().Err(err).Msg("Service creation error")
 			return fmt.Errorf("service creation error: %v", err)
 		}
+
+		if err := svc.Validate(); err != nil {
+			cmdLogger.Error().Err(err).Msg("Service error")
+			return fmt.Errorf("service error: %v", err)
+		}
+
+		cmdLogger.Info().Msgf("Starting service process [%d] (Press CTRL+C to quit)", os.Getpid())
 
 		// If an interrupt signal is caught, gracefully shut down the service
 		// and encapsulate any error it returns.
