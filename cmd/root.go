@@ -15,8 +15,12 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/moderncode-source/vex-svc/vex"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/diode"
 	"github.com/spf13/cobra"
 )
 
@@ -37,15 +41,17 @@ var rootCmd = &cobra.Command{
 in the cloud under controlled, isolated environments.
 Documentation is available at https://github.com/moderncode-source/vex-svc`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		debug, err := cmd.Flags().GetBool(verboseFlag)
-		if err != nil {
-			return fmt.Errorf("could not retrieve %s flag value: %v", verboseFlag, err)
-		}
+		// Get a logger for this command.
+		var debug bool
+		var err error
 
-		// TODO; replace fmt with a proper logger.
-		if debug {
-			fmt.Println("Welcome to Vex - a virtual execution micro-service")
-			fmt.Println("Verbose output enabled")
+		cmdLogger := globalCmdLogger
+
+		if debug, err = cmd.Flags().GetBool(verboseFlag); err != nil {
+			return fmt.Errorf("could not retrieve %s flag value: %v", verboseFlag, err)
+		} else if !debug {
+			// https://github.com/rs/zerolog/tree/master#leveled-logging
+			cmdLogger = cmdLogger.Level(zerolog.InfoLevel)
 		}
 
 		addr, err := cmd.Flags().GetString(addrFlag)
@@ -53,28 +59,41 @@ Documentation is available at https://github.com/moderncode-source/vex-svc`,
 			return fmt.Errorf("could not retrieve %s flag value: %v", addrFlag, err)
 		}
 
-		// TODO; replace fmt with a proper logger.
-		// TODO: replace with svc.Start(), svc.Serve() for better validation.
-		if debug {
-			fmt.Printf("Will attempt to listen on: %s\n", addr)
-			fmt.Println("Press CTRL+C to interrupt")
+		cmdLogger.Info().Msg("Welcome to Vex - a virtual execution micro-service")
+		cmdLogger.Info().Msgf("Starting service process [%d] (Press CTRL+C to quit)", os.Getpid())
+
+		// Create a thread-safe and fast logger for the service.
+		w := diode.NewWriter(logOutput, diodeWriterSize, 0, func(missed int) {
+			cmdLogger.Warn().Msgf("Service dropped %d logs", missed)
+		})
+
+		svcLogger := zerolog.New(w)
+		if !debug {
+			svcLogger = svcLogger.Level(zerolog.InfoLevel)
 		}
 
-		// Create new Vex service.
-		svc := vex.New(addr)
+		// Create a new Vex service.
+		svc, err := vex.New(addr, &svcLogger)
+		if err != nil {
+			cmdLogger.Error().Err(err).Msg("Service creation error")
+			return fmt.Errorf("service creation error: %v", err)
+		}
 
-		// TODO: might suit us better: [signal.NotifyContext].
-		// If an interrupt signal is caught, gracefully shut down the
-		// service and encapsulate any error it returns.
-		interrupt := make(chan os.Signal, 1)
-		signal.Notify(interrupt, os.Interrupt)
+		// If an interrupt signal is caught, gracefully shut down the service
+		// and encapsulate any error it returns.
 		shutdownErr := make(chan error, 1)
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
-		// TODO: add another chan to control this go-routine: wait for it to
-		// exit before saying "goodbye" to the user.
+		var wg sync.WaitGroup
+		defer wg.Wait() // Wait for the go-routine below to exit.
+		defer cancel()
+
+		wg.Add(1)
 		go func() {
-			<-interrupt
-			fmt.Println("CTRL+C detected, shutting down...")
+			defer wg.Done()
+
+			<-ctx.Done()
+			cmdLogger.Info().Msg("Shutting down...")
 
 			// TODO: pass a context with timeout.
 			if err := svc.Stop(context.Background()); err != nil {
@@ -85,20 +104,25 @@ Documentation is available at https://github.com/moderncode-source/vex-svc`,
 		}()
 
 		if err := svc.Start(); err != nil {
-			return fmt.Errorf("service error: %v", err)
+			cmdLogger.Error().Err(err).Msg("Service start error")
+			return fmt.Errorf("service start error: %v", err)
 		}
 
 		if err := <-shutdownErr; err != nil {
-			return fmt.Errorf("failed to shut down the service: %v", err)
-		} else if debug {
-			fmt.Println("Vex service was successfully shut down")
-			fmt.Println("Goodbye!")
+			cmdLogger.Error().Err(err).Msg("Service shutdown error")
+			return fmt.Errorf("service shutdown error: %v", err)
 		}
 
+		cmdLogger.Info().Msg("Service shutdown complete")
+		cmdLogger.Info().Msgf("Finished service process [%d]", os.Getpid())
 		return nil
 	},
 }
 
+// Execute matches ands runs the appropriate CLI command.
 func Execute() error {
-	return rootCmd.Execute()
+	if err := rootCmd.Execute(); err != nil {
+		return fmt.Errorf("vex CLI exited with error: %s", err)
+	}
+	return nil
 }
