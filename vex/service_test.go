@@ -89,3 +89,30 @@ func TestNew(t *testing.T) {
 	do(http.MethodGet, url+vex.HealthEndpoint, http.StatusOK)
 	do(http.MethodGet, url+vex.ReadyEndpoint, http.StatusOK)
 }
+
+func TestNewError(t *testing.T) {
+	logger := zerolog.Nop()
+
+	mux1 := http.NewServeMux()
+
+	svc1 := vex.NewWithHandler("", mux1, &logger)
+	if err := svc1.RegisterDefaultHandlers(mux1); err != nil {
+		t.Fatalf("NewWithHandler1: failed to register handlers: %s", err)
+	}
+
+	if err := svc1.RegisterDefaultHandlers(mux1); err == nil {
+		t.Fatal("Service1: registering handlers with the same mux must fail")
+	}
+
+	svc2 := vex.NewWithHandler("", mux1, &logger)
+	if err := svc2.RegisterDefaultHandlers(mux1); err == nil {
+		t.Fatal("Service2: registering handlers with the same mux must fail")
+	}
+
+	mux2 := http.NewServeMux()
+
+	svc2 = vex.NewWithHandler("", mux2, &logger)
+	if err := svc2.RegisterDefaultHandlers(mux2); err != nil {
+		t.Fatalf("NewWithHandler2: failed to register handlers: %s", err)
+	}
+}
