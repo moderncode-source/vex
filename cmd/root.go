@@ -40,6 +40,7 @@ var rootCmd = &cobra.Command{
 	Long: `Vex is a virtual execution micro-service that runs arbitrary code
 in the cloud under controlled, isolated environments.
 Documentation is available at https://github.com/moderncode-source/vex-svc`,
+	SilenceUsage: true, // Do not print usage on error.
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		// Get a logger for this command.
 		var debug bool
