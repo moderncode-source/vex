@@ -20,14 +20,24 @@ import (
 	"time"
 
 	"github.com/moderncode-source/vex-svc/vex"
+	"github.com/rs/zerolog"
 )
 
 func TestNew(t *testing.T) {
 	const addr = ":8080"
 	const url = "http://localhost" + addr
 
-	svc := vex.New(addr)
 	var wg sync.WaitGroup
+
+	// TODO: use a normal logger instead and rely on test verbosity.
+	logger := zerolog.Nop()
+
+	// TODO: use [vex.NewWithHandler] here to avoid affecting any other tests
+	//       that could possibly rely on [vex.ServiceMux].
+	svc, err := vex.New(addr, &logger)
+	if err != nil {
+		t.Fatalf("Failed to create a service: %s", err)
+	}
 
 	// Give the entire operation with the service to complete within 1 second.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -48,14 +58,12 @@ func TestNew(t *testing.T) {
 		wg.Done()
 	}()
 
-	var err error
-	var req *http.Request
 	cli := &http.Client{}
 
 	do := func(method, url string, wantStatus int) {
 		t.Logf("Testing request to %s %s", method, url)
 
-		req, err = http.NewRequestWithContext(ctx, method, url, nil)
+		req, err := http.NewRequestWithContext(ctx, method, url, nil)
 		if err != nil {
 			t.Fatalf("Failed to create request: %s", err)
 		}
