@@ -24,6 +24,9 @@ import (
 
 const mockURL = "http://localhost:8080"
 
+// mockService is used to test request handler responses.
+var mockService = vex.NewWithHandler("", nil, nil)
+
 func checkHandlerResponseCode(
 	ctx context.Context, handler http.Handler, want int, method, url string,
 ) error {
@@ -38,43 +41,32 @@ func checkHandlerResponseCode(
 	return nil
 }
 
-func TestHealthHandler(t *testing.T) {
-	const url = mockURL + vex.HealthEndpoint
-
+func TestHealthAndReadyHandlers(t *testing.T) {
 	ctx := context.Background()
 
-	if err := checkHandlerResponseCode(
-		ctx, http.HandlerFunc(vex.HealthHandler),
-		http.StatusOK, http.MethodGet, url,
-	); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		ctx         context.Context
+		handler     http.Handler
+		want        int
+		method, url string
+	}{
+		{ctx, http.HandlerFunc(mockService.HealthHandler), http.StatusOK, http.MethodGet, mockURL + vex.HealthEndpoint},
+		{ctx, http.HandlerFunc(mockService.HealthHandler), http.StatusMethodNotAllowed, http.MethodPost, mockURL + vex.HealthEndpoint},
+
+		{ctx, http.HandlerFunc(mockService.ReadyHandler), http.StatusOK, http.MethodGet, mockURL + vex.ReadyEndpoint},
+		{ctx, http.HandlerFunc(mockService.ReadyHandler), http.StatusMethodNotAllowed, http.MethodPost, mockURL + vex.ReadyEndpoint},
 	}
 
-	if err := checkHandlerResponseCode(
-		ctx, http.HandlerFunc(vex.HealthHandler),
-		http.StatusMethodNotAllowed, http.MethodPost, url,
-	); err != nil {
-		t.Fatal(err)
-	}
-}
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%s %s", tt.method, tt.url)
 
-func TestReadyHandler(t *testing.T) {
-	const url = mockURL + vex.ReadyEndpoint
-
-	ctx := context.Background()
-
-	if err := checkHandlerResponseCode(
-		ctx, http.HandlerFunc(vex.ReadyHandler),
-		http.StatusOK, http.MethodGet, url,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := checkHandlerResponseCode(
-		ctx, http.HandlerFunc(vex.ReadyHandler),
-		http.StatusMethodNotAllowed, http.MethodPost, url,
-	); err != nil {
-		t.Fatal(err)
+		t.Run(testname, func(t *testing.T) {
+			if err := checkHandlerResponseCode(
+				tt.ctx, tt.handler, tt.want, tt.method, tt.url,
+			); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
