@@ -12,7 +12,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/moderncode-source/vex-svc/cmd"
@@ -20,7 +19,6 @@ import (
 
 func main() {
 	if err := cmd.Execute(); err != nil {
-		fmt.Printf("Vex CLI exited with error: %s\n", err)
 		os.Exit(1)
 	}
 }
